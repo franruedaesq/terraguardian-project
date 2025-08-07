@@ -1,6 +1,12 @@
+// Import the necessary modules for path manipulation in ESM
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'fs';
+
+// Get the current directory path for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export function runTerraformPlan(): string | null {
   const infraDir = join(__dirname, '../../../infrastructure');
