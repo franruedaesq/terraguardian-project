@@ -1,22 +1,18 @@
-// Import the necessary modules for path manipulation in ESM
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 
-// Get the current directory path for ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 export function runTerraformPlan(): string | null {
-  const infraDir = join(__dirname, '../../../infrastructure');
+  // CORRECCIÓN: Usar la ruta absoluta y fija dentro del contenedor de Docker.
+  const infraDir = '/app/infrastructure';
+
   if (!existsSync(infraDir)) {
+    // Esta línea ya no debería ejecutarse, pero la dejamos como una salvaguarda.
     console.error(`Infrastructure directory not found at: ${infraDir}`);
     process.exit(1);
   }
 
   try {
-    console.log('Initializing Terraform...');
+    console.log(`Initializing Terraform in ${infraDir}...`);
     execSync('terraform init', { cwd: infraDir, stdio: 'inherit' });
 
     console.log('Running terraform plan...');
