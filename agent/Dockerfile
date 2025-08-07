@@ -1,4 +1,4 @@
-FROM alpine:3.18 AS base
+FROM alpine:3.20 AS base
 
 RUN apk add --no-cache terraform nodejs npm
 
