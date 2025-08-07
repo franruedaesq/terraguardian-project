@@ -6,7 +6,7 @@ import pino from 'pino';
 
 import { GOVERNANCE_RULES } from './governance';
 import { runTerraformPlan } from './terraform';
-import { AnalysisResponseSchema, ViolationSchema } from './schemas'; // Import our new Zod schemas
+import { AnalysisResponseSchema, ViolationSchema } from './schemas';
 
 const logger = pino({ transport: { target: 'pino-pretty' } });
 
