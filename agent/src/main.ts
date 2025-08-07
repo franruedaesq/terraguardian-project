@@ -2,13 +2,15 @@ import { Octokit } from '@octokit/rest';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import { readFileSync } from 'fs';
-import pino from 'pino';
+import { pino } from 'pino';
 
-import { GOVERNANCE_RULES } from './governance';
-import { runTerraformPlan } from './terraform';
-import { AnalysisResponseSchema, ViolationSchema } from './schemas';
+// CORRECCIÓN 1: Añadir extensiones .js a las importaciones locales
+import { GOVERNANCE_RULES } from './governance.js';
+import { runTerraformPlan } from './terraform.js';
+import { AnalysisResponseSchema, type Violation } from './schemas.js'; // Usamos 'type' para la importación de tipos
 
-const logger = pino({ transport: { target: 'pino-pretty' } });
+// CORRECCIÓN 2: Simplificar la inicialización de pino
+const logger = pino();
 
 async function main() {
   logger.info('Starting TerraGuardian PR Review...');
@@ -16,7 +18,6 @@ async function main() {
   const githubToken = process.env.GITHUB_TOKEN;
   const githubEventPath = process.env.GITHUB_EVENT_PATH;
 
-  // OpenAI key is now read automatically by the client from env vars
   if (!githubToken || !process.env.OPENAI_API_KEY || !githubEventPath) {
     logger.error('Missing required environment variables.');
     process.exit(1);
@@ -32,14 +33,12 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Run Terraform Plan
   const tfPlanJson = runTerraformPlan();
   if (!tfPlanJson) {
     logger.error('Failed to generate Terraform plan.');
     process.exit(1);
   }
 
-  // 2. Analyze with OpenAI using the new Responses API
   const openai = new OpenAI();
   logger.info('Sending plan to OpenAI for structured analysis using gpt-4o-2024-08-06...');
 
@@ -60,15 +59,15 @@ async function main() {
     },
   });
 
-  // 3. Post Comment to GitHub PR
   let commentBody = '### 🛡️ TerraGuardian Analysis Complete 🛡️\n\n';
 
   if (response.status === 'completed' && response.output_parsed) {
-    const findings = response.output_parsed.violations;
+    // CORRECCIÓN 3: Usar nuestro tipo 'Violation' para tener tipado estricto
+    const findings: Violation[] = response.output_parsed.violations;
 
     if (findings && findings.length > 0) {
       commentBody += '**Found issues that require your attention:**\n\n';
-      findings.forEach((finding) => { // 'finding' is now fully typed!
+      findings.forEach((finding) => { // 'finding' ahora tiene un tipo correcto, no 'any'
         commentBody += `**[${finding.severity}]** - **${finding.violation_id}** on \`${finding.resource_address}\`\n`;
         commentBody += `* **Finding:** ${finding.finding_summary}\n`;
         commentBody += `* **Suggestion:** ${finding.remediation_suggestion}\n\n`;
@@ -77,7 +76,6 @@ async function main() {
       commentBody += '**✅ No governance violations found. Well done!**';
     }
   } else {
-    // Handle cases where the model refuses or the response is incomplete
     logger.error({ msg: 'AI analysis did not complete successfully', status: response.status, details: response.incomplete_details });
     commentBody += `**⚠️ Analysis Incomplete:** The AI analysis could not be completed. Status: \`${response.status}\`. Please check the workflow logs.`;
   }

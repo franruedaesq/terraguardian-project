@@ -13,3 +13,6 @@ export const ViolationSchema = z.object({
 export const AnalysisResponseSchema = z.object({
   violations: z.array(ViolationSchema).describe("An array of all governance violations found in the Terraform plan."),
 });
+
+// CAMBIO CLAVE: Exportamos un tipo de TypeScript inferido de nuestro schema de Zod.
+export type Violation = z.infer<typeof ViolationSchema>;
