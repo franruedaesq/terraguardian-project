@@ -42,8 +42,7 @@ resource "aws_lambda_function" "scanner_agent" {
     variables = {
       AGENT_MODE        = "live-scan"
       GITHUB_REPOSITORY = var.github_repo
-      GITHUB_TOKEN      = local.secrets.GITHUB_TOKEN
-      OPENAI_API_KEY    = local.secrets.OPENAI_API_KEY
+      SECRETS_ARN       = data.aws_secretsmanager_secret_version.github_token.arn
     }
   }
 }

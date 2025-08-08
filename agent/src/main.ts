@@ -9,13 +9,34 @@ import { runTerraformPlan } from "./terraform.js";
 import { runLiveScanner } from "./scanner.js";
 import { AnalysisResponseSchema, type Violation } from "./schemas.js";
 import { violationsFound, pushMetrics } from "./metrics.js";
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from "@aws-sdk/client-secrets-manager";
 
 const logger = pino();
-const openai = new OpenAI();
+// const openai = new OpenAI();
+
+async function getSecrets() {
+  const secretsArn = process.env.SECRETS_ARN;
+  if (!secretsArn) {
+    throw new Error("SECRETS_ARN environment variable not set.");
+  }
+  const client = new SecretsManagerClient({ region: "eu-central-1" });
+  const command = new GetSecretValueCommand({ SecretId: secretsArn });
+  const response = await client.send(command);
+  if (!response.SecretString) {
+    throw new Error("SecretString not found in AWS Secrets Manager response.");
+  }
+  return JSON.parse(response.SecretString);
+}
 
 async function runPRReview() {
   logger.info("Starting TerraGuardian PR Review...");
-  const githubToken = process.env.GITHUB_TOKEN;
+  const secrets = await getSecrets();
+  const githubToken = secrets.GITHUB_TOKEN;
+  const openaiApiKey = secrets.OPENAI_API_KEY;
+  //   const githubToken = process.env.GITHUB_TOKEN;
   const githubEventPath = process.env.GITHUB_EVENT_PATH;
   if (!githubToken || !process.env.OPENAI_API_KEY || !githubEventPath) {
     logger.error("Missing required environment variables for PR Review.");
@@ -35,6 +56,7 @@ async function runPRReview() {
     process.exit(1);
   }
   logger.info("Sending plan to OpenAI for structured analysis using gpt-5...");
+  const openai = new OpenAI({ apiKey: openaiApiKey });
   const response = await openai.responses.parse({
     model: "gpt-5",
     input: [
@@ -86,8 +108,12 @@ async function runPRReview() {
 }
 
 async function runScanAndReport() {
+  const secrets = await getSecrets();
+  const githubToken = secrets.GITHUB_TOKEN;
+  const openaiApiKey = secrets.OPENAI_API_KEY;
+
   logger.info("Starting Live Scan and Report...");
-  const githubToken = process.env.GITHUB_TOKEN;
+  //   const githubToken = process.env.GITHUB_TOKEN;
   const repoPath = process.env.GITHUB_REPOSITORY;
   if (!githubToken || !repoPath) {
     logger.error(
@@ -95,6 +121,8 @@ async function runScanAndReport() {
     );
     process.exit(1);
   }
+  const openai = new OpenAI({ apiKey: openaiApiKey });
+
   const findings = await runLiveScanner();
   if (findings.length > 0) {
     violationsFound.inc(
