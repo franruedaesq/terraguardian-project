@@ -15,7 +15,6 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 
 const logger = pino();
-// const openai = new OpenAI();
 
 async function getSecrets() {
   const secretsArn = process.env.SECRETS_ARN;
@@ -38,8 +37,9 @@ async function runPRReview() {
   const openaiApiKey = secrets.OPENAI_API_KEY;
   //   const githubToken = process.env.GITHUB_TOKEN;
   const githubEventPath = process.env.GITHUB_EVENT_PATH;
-  if (!githubToken || !process.env.OPENAI_API_KEY || !githubEventPath) {
-    logger.error("Missing required environment variables for PR Review.");
+
+  if (!githubToken || !openaiApiKey || !githubEventPath) {
+    logger.error("Missing secrets or GITHUB_EVENT_PATH for PR Review.");
     process.exit(1);
   }
   const eventPayload = JSON.parse(readFileSync(githubEventPath, "utf8"));
@@ -113,14 +113,12 @@ async function runScanAndReport() {
   const openaiApiKey = secrets.OPENAI_API_KEY;
 
   logger.info("Starting Live Scan and Report...");
-  //   const githubToken = process.env.GITHUB_TOKEN;
   const repoPath = process.env.GITHUB_REPOSITORY;
-  if (!githubToken || !repoPath) {
-    logger.error(
-      "Missing GITHUB_TOKEN or GITHUB_REPOSITORY environment variables for Live Scan."
-    );
+  if (!githubToken || !repoPath || !openaiApiKey) {
+    logger.error("Missing secrets or GITHUB_REPOSITORY for Live Scan.");
     process.exit(1);
   }
+
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
   const findings = await runLiveScanner();
