@@ -1,25 +1,25 @@
 import { Octokit } from '@octokit/rest';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 import { readFileSync } from 'fs';
 import { pino } from 'pino';
-
-// CORRECCIÓN 1: Añadir extensiones .js a las importaciones locales
 import { GOVERNANCE_RULES } from './governance.js';
 import { runTerraformPlan } from './terraform.js';
-import { AnalysisResponseSchema, type Violation } from './schemas.js'; // Usamos 'type' para la importación de tipos
+import { runLiveScanner } from './scanner.js';
+import { AnalysisResponseSchema, type Violation } from './schemas.js';
 
-// CORRECCIÓN 2: Simplificar la inicialización de pino
 const logger = pino();
+const openai = new OpenAI();
 
-async function main() {
+async function runPRReview() {
   logger.info('Starting TerraGuardian PR Review...');
 
   const githubToken = process.env.GITHUB_TOKEN;
   const githubEventPath = process.env.GITHUB_EVENT_PATH;
 
   if (!githubToken || !process.env.OPENAI_API_KEY || !githubEventPath) {
-    logger.error('Missing required environment variables.');
+    logger.error('Missing required environment variables for PR Review.');
     process.exit(1);
   }
 
@@ -39,15 +39,14 @@ async function main() {
     process.exit(1);
   }
 
-  const openai = new OpenAI();
-  logger.info('Sending plan to OpenAI for structured analysis using gpt-4o-2024-08-06...');
+  logger.info('Sending plan to OpenAI for structured analysis using gpt-5...');
 
   const response = await openai.responses.parse({
-    model: "gpt-4o-2024-08-06",
+    model: "gpt-5",
     input: [
       {
         role: "system",
-        content: `You are an expert AWS infrastructure security and cost analyst named TerraGuardian. Analyze the user-provided Terraform plan against the given governance rules and extract all violations into the required structured format.`,
+        content: `You are an expert AWS infrastructure security analyst named TerraGuardian. Analyze the user-provided Terraform plan against the given governance rules and extract all violations into the required structured format.`,
       },
       {
         role: "user",
@@ -62,12 +61,11 @@ async function main() {
   let commentBody = '### 🛡️ TerraGuardian Analysis Complete 🛡️\n\n';
 
   if (response.status === 'completed' && response.output_parsed) {
-    // CORRECCIÓN 3: Usar nuestro tipo 'Violation' para tener tipado estricto
     const findings: Violation[] = response.output_parsed.violations;
 
     if (findings && findings.length > 0) {
       commentBody += '**Found issues that require your attention:**\n\n';
-      findings.forEach((finding) => { // 'finding' ahora tiene un tipo correcto, no 'any'
+      findings.forEach((finding) => {
         commentBody += `**[${finding.severity}]** - **${finding.violation_id}** on \`${finding.resource_address}\`\n`;
         commentBody += `* **Finding:** ${finding.finding_summary}\n`;
         commentBody += `* **Suggestion:** ${finding.remediation_suggestion}\n\n`;
@@ -91,4 +89,84 @@ async function main() {
   logger.info('Successfully posted comment to PR.');
 }
 
-main();
+/**
+ * MODE 2: Scans a live AWS environment and creates a summary issue in GitHub.
+ */
+async function runScanAndReport() {
+  logger.info('Starting Live Scan and Report...');
+
+  const githubToken = process.env.GITHUB_TOKEN;
+  const repoPath = process.env.GITHUB_REPOSITORY; // e.g., "franruedaesq/terraguardian-project"
+
+  if (!githubToken || !repoPath) {
+    logger.error('Missing GITHUB_TOKEN or GITHUB_REPOSITORY environment variables for Live Scan.');
+    process.exit(1);
+  }
+
+  const findings = await runLiveScanner();
+
+  if (findings.length === 0) {
+    logger.info("No findings from live scan. Environment is clean!");
+    return;
+  }
+
+  const findingsText = findings.join('\n');
+  const ReportSummarySchema = z.object({
+    summary: z.string().describe("A brief, clear, and prioritized report summarizing the findings for a GitHub issue."),
+  });
+
+  logger.info('Sending findings to OpenAI for summarization using gpt-5...');
+  const response = await openai.responses.parse({
+    model: "gpt-5",
+    input: [
+      { role: "system", content: "You are a cloud security analyst. Summarize the following findings into a brief, clear, and prioritized report." },
+      { role: "user", content: `Please summarize these issues:\n${findingsText}` },
+    ],
+    text: {
+      format: zodTextFormat(ReportSummarySchema, "security_report_summary"),
+    },
+  });
+
+  if (response.status !== 'completed' || !response.output_parsed) {
+    logger.error({ msg: 'AI summarization did not complete successfully', status: response.status });
+    return;
+  }
+
+  const summary = response.output_parsed.summary;
+  const issueBody = `### 🚨 TerraGuardian Weekly Security Report 🚨\n\nOur automated scan has detected the following potential issues in the AWS environment. Please review and remediate as necessary.\n\n--- \n\n${summary}`;
+  
+  const [repoOwner, repoName] = repoPath.split('/');
+
+  const octokit = new Octokit({ auth: githubToken });
+  await octokit.issues.create({
+    owner: repoOwner,
+    repo: repoName,
+    title: `TerraGuardian Security Report - ${new Date().toISOString().split('T')[0]}`,
+    body: issueBody,
+    labels: ['security', 'autogenerated']
+  });
+
+  logger.info(`Successfully created security report issue in ${repoPath}`);
+}
+
+/**
+ * Main entry point: Determines which mode the agent should run in.
+ */
+async function main() {
+  // Use AGENT_MODE environment variable to switch between behaviors.
+  // Defaults to 'pr-review' if not set.
+  const mode = process.env.AGENT_MODE || 'pr-review';
+
+  logger.info(`Running in '${mode}' mode.`);
+
+  if (mode === 'live-scan') {
+    await runScanAndReport();
+  } else {
+    await runPRReview();
+  }
+}
+
+main().catch(error => {
+  logger.error(error);
+  process.exit(1);
+});
