@@ -2,11 +2,9 @@ import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 
 export function runTerraformPlan(): string | null {
-  // CORRECCIÓN: Usar la ruta absoluta y fija dentro del contenedor de Docker.
   const infraDir = '/app/infrastructure';
 
   if (!existsSync(infraDir)) {
-    // Esta línea ya no debería ejecutarse, pero la dejamos como una salvaguarda.
     console.error(`Infrastructure directory not found at: ${infraDir}`);
     process.exit(1);
   }
