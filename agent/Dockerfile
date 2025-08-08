@@ -24,6 +24,8 @@ RUN microdnf install -y wget unzip && \
     rm terraform_1.9.0_linux_amd64.zip && \
     microdnf clean all
 
+COPY --from=builder /usr/app/package.json ./
+    
 COPY --from=builder /usr/app/node_modules ./node_modules
 
 COPY --from=builder /usr/app/dist/ ./
