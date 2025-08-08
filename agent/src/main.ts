@@ -148,11 +148,8 @@ async function runScanAndReport() {
   logger.info(`Successfully created security report issue in ${repoPath}`);
 }
 
-export const handler = async (event: any, context: any) => {
-  // In the future, we could inspect the 'event' to see what triggered the Lambda.
-  // For a scheduled EventBridge trigger, it will be a simple event object.
-
-  const mode = process.env.AGENT_MODE || 'live-scan'; 
+export const handler = async (event: any) => {
+  const mode = process.env.AGENT_MODE || 'live-scan'; // Default to live-scan for Lambda
   logger.info(`Handler invoked. Running in '${mode}' mode.`);
 
   try {
@@ -161,15 +158,9 @@ export const handler = async (event: any, context: any) => {
     } else {
       await runPRReview();
     }
-    return {
-      statusCode: 200,
-      body: JSON.stringify('Agent finished successfully.'),
-    };
+    return { statusCode: 200, body: 'Agent finished successfully.' };
   } catch (error) {
     logger.error(error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify('Agent encountered an error.'),
-    };
+    return { statusCode: 500, body: 'Agent encountered an error.' };
   }
 };
