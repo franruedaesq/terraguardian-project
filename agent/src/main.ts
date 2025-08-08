@@ -12,6 +12,7 @@ import { AnalysisResponseSchema, type Violation } from './schemas.js';
 const logger = pino();
 const openai = new OpenAI();
 
+
 async function runPRReview() {
   logger.info('Starting TerraGuardian PR Review...');
 
@@ -89,14 +90,12 @@ async function runPRReview() {
   logger.info('Successfully posted comment to PR.');
 }
 
-/**
- * MODE 2: Scans a live AWS environment and creates a summary issue in GitHub.
- */
+
 async function runScanAndReport() {
   logger.info('Starting Live Scan and Report...');
 
   const githubToken = process.env.GITHUB_TOKEN;
-  const repoPath = process.env.GITHUB_REPOSITORY; // e.g., "franruedaesq/terraguardian-project"
+  const repoPath = process.env.GITHUB_REPOSITORY;
 
   if (!githubToken || !repoPath) {
     logger.error('Missing GITHUB_TOKEN or GITHUB_REPOSITORY environment variables for Live Scan.');
@@ -149,24 +148,28 @@ async function runScanAndReport() {
   logger.info(`Successfully created security report issue in ${repoPath}`);
 }
 
-/**
- * Main entry point: Determines which mode the agent should run in.
- */
-async function main() {
-  // Use AGENT_MODE environment variable to switch between behaviors.
-  // Defaults to 'pr-review' if not set.
-  const mode = process.env.AGENT_MODE || 'pr-review';
+export const handler = async (event: any, context: any) => {
+  // In the future, we could inspect the 'event' to see what triggered the Lambda.
+  // For a scheduled EventBridge trigger, it will be a simple event object.
 
-  logger.info(`Running in '${mode}' mode.`);
+  const mode = process.env.AGENT_MODE || 'live-scan'; 
+  logger.info(`Handler invoked. Running in '${mode}' mode.`);
 
-  if (mode === 'live-scan') {
-    await runScanAndReport();
-  } else {
-    await runPRReview();
+  try {
+    if (mode === 'live-scan') {
+      await runScanAndReport();
+    } else {
+      await runPRReview();
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify('Agent finished successfully.'),
+    };
+  } catch (error) {
+    logger.error(error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify('Agent encountered an error.'),
+    };
   }
-}
-
-main().catch(error => {
-  logger.error(error);
-  process.exit(1);
-});
+};
